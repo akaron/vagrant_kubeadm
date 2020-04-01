@@ -1,0 +1,10 @@
+--- kube-flannel.yml	2020-03-30 16:39:55.901500668 +0800
++++ kube-flannel-virtualbox.yml	2020-03-30 17:40:50.153607064 +0800
+@@ -189,6 +189,7 @@
+         args:
+         - --ip-masq
+         - --kube-subnet-mgr
++        - --iface=eth1
+         resources:
+           requests:
+             cpu: "100m"

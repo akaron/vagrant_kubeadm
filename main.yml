@@ -1,0 +1,98 @@
+---
+- hosts: kube
+  become: true
+
+  vars_files:
+    - vars/kube.yml
+    - vars/docker.yml
+
+  pre_tasks:
+    - include_tasks: tasks/vagrant-setup.yml
+    - include_tasks: tasks/install_pip_pkgs.yml
+    - name: Ensure dependencies are installed.
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - python-apt
+        state: present
+
+    - name: Add Kubernetes apt key.
+      apt_key:
+        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        state: present
+      register: add_repository_key
+      ignore_errors: false
+
+    - name: Add Kubernetes repository.
+      apt_repository:
+        repo: "deb http://apt.kubernetes.io/ kubernetes-xenial main"
+        state: present
+        update_cache: true
+
+    - name: Add Kubernetes apt preferences file to pin a version.
+      template:
+        src: apt-preferences-kubernetes.j2
+        dest: /etc/apt/preferences.d/kubernetes
+
+    - name: Disable swap for kubernetes (if configured)
+      command: swapoff -a
+
+  # roles:
+  #   - geerlingguy.security
+
+  handlers:
+    - name: restart kubelet
+      service: name=kubelet state=restarted
+    - name: restart docker
+      service: "name=docker state={{ docker_restart_handler_state }}"
+
+  tasks:
+    - include_tasks: tasks/install_docker.yml
+
+    # All tasks below are for kubernete installation and setup.
+    - name: Install Kubernetes packages.
+      package:
+        name: "{{ item }}"
+        state: present
+      notify: restart kubelet
+      with_items:
+        - kubelet
+        - kubectl
+        - kubeadm
+        - kubernetes-cni
+
+    - name: Ensure kubelet is started and enabled at boot.
+      service: name=kubelet state=started enabled=true
+
+    - name: Check if Kubernetes has already been initialized.
+      stat:
+        path: /etc/kubernetes/admin.conf
+      register: kubernetes_init_stat
+
+    # Set up master.
+    - include_tasks: tasks/master-setup.yml
+      when: kubernetes_role == 'master'
+
+    # Set up nodes.
+    - name: Get the kubeadm join command from the Kubernetes master.
+      command: kubeadm token create --print-join-command
+      changed_when: false
+      when: kubernetes_role == 'master'
+      register: kubernetes_join_command_result
+
+    - name: Set the kubeadm join command globally.
+      set_fact:
+        kubernetes_join_command: >
+          {{ kubernetes_join_command_result.stdout }}
+          {{ kubernetes_join_command_extra_opts }}
+      when: kubernetes_join_command_result.stdout is defined
+      delegate_to: "{{ item }}"
+      delegate_facts: true
+      with_items: "{{ groups['all'] }}"
+
+    - name: join node to kubernetes master
+      shell: >
+        {{ kubernetes_join_command }}
+        creates=/etc/kubernetes/kubelet.conf
+      when: kubernetes_role == 'node'
