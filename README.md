@@ -6,9 +6,18 @@ https://github.com/geerlingguy/ansible-for-kubernetes/tree/master/cluster-local-
 Here removes the use of roles from ansible-galaxy, supports only Debian 10 so no need
 the os-specific condition/variable/tasks, and remove some variables.
 
-To run it, only need `vagrant up`. It brings up 3 nodes, and run the playbook
-`main.yml`. Then run `ansible-playbook -i inventory test-deployment.yml` for a test
-deployment. 
+# steps
+All commands running on host machine, inside the folder.
+
+* Run `vagrant up`
+    - brings up 3 nodes, and run the playbook `main.yml`
+* Run `ansible-playbook -i inventory test-deployment.yml`
+    - deploy the deployment https://hub.docker.com/r/paulbouwer/hello-kubernetes
+* open browser to verify the deployment
+    - run `ansible kube1 -i inventory -m shell -b -a "kubectl get svc -o wide"`
+      to get the `NodePort`
+    - open browser and open page `http://192.168.7.3:32752`. Change the `32752`
+      to the `NodePort` above.
 
 # notes
 * There are still ansible-galaxy roles `gerrlingguy.security` in
